@@ -1,0 +1,19 @@
+# ASAP7 libraries: fetched by flow/get_asap7.sh, never committed
+libs/
+
+# Simulation dumps and trace arrays
+*.vcd
+*.fst
+*.npy
+*.npz
+results/raw/
+
+# Build and tool output
+build/
+obj_dir/
+*.log
+
+# Python
+__pycache__/
+*.pyc
+.venv/
