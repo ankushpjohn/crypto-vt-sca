@@ -7,8 +7,9 @@
 # Another design:
 #   TOP=sbox_col_toy sta -no_init -no_splash -exit flow/sta_window.tcl
 #
-# Times are in ps. The clock is ideal, there is no wire load, and paths from
-# input ports are not constrained, so only register-to-register paths count.
+# Constraints come from flow/<TOP>.sdc when that file exists. Otherwise the
+# design gets a bare ideal clock, and only register-to-register paths are
+# timed. Times are in ps.
 
 proc env_or {name default} {
   if {[info exists ::env($name)]} { return $::env($name) }
@@ -19,6 +20,7 @@ set LIBDIR  [env_or LIBDIR libs/asap7]
 set TOP     [env_or TOP ascon_core]
 set NETLIST [env_or NETLIST build/$TOP.v]
 set CORNER  [env_or CORNER TT]
+set SDC     [env_or SDC flow/$TOP.sdc]
 set PERIOD  1000.0 ;# ps; arbitrary, only used to turn slack into a period
 
 # Flavour name -> suffix on the ASAP7 cell name, slowest first.
@@ -32,7 +34,14 @@ foreach vt $FLAVOURS {
 }
 read_verilog $NETLIST
 link_design $TOP
-create_clock -name clk -period $PERIOD [get_ports clk]
+if {[file exists $SDC]} {
+  set clk_period $PERIOD
+  source $SDC
+  set constraints $SDC
+} else {
+  create_clock -name clk -period $PERIOD [get_ports clk]
+  set constraints "ideal clock only"
+}
 
 # Worst setup (max) or hold (min) slack in ps.
 proc worst_slack {min_max} {
@@ -49,6 +58,7 @@ proc set_all {vt} {
 }
 
 puts "\n== Timing window of $TOP ($NETLIST, $CORNER, [llength [get_cells *]] cells)"
+puts "constraints: $constraints"
 puts [format "%-8s %14s %14s" flavour min_period_ps hold_slack_ps]
 foreach vt $FLAVOURS {
   set_all $vt
