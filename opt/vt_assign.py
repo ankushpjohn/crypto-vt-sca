@@ -100,15 +100,24 @@ def close_timing(sta: Sta, cost, batch_fraction: float, log) -> int:
             )
         trials = sta.trial(candidates)
 
-        scored = []
-        for (inst, f), t in zip(candidates, trials):
-            gain = t.tns - now.tns            # > 0 means less violation
-            if gain <= 0.0:
-                continue
-            c = cost.delta(inst, f)
-            # Moves that cost nothing (or reduce cost) rank above all others.
-            key = (1, gain) if c <= 0.0 else (0, gain / c)
-            scored.append((key, inst, f))
+        def score(gain_of):
+            scored = []
+            for (inst, f), t in zip(candidates, trials):
+                gain = gain_of(t)                 # > 0 means less violation
+                if gain <= 0.0:
+                    continue
+                c = cost.delta(inst, f)
+                # Moves that cost nothing (or reduce cost) rank above all others.
+                key = (1, gain) if c <= 0.0 else (0, gain / c)
+                scored.append((key, inst, f))
+            return scored
+
+        scored = score(lambda t: t.tns - now.tns)
+        if not scored:
+            # OpenSTA reports a total negative slack of exactly 0 once the
+            # remaining violation is a small fraction of a ps, so no swap
+            # appears to help. The worst slack still shows the improvement.
+            scored = score(lambda t: t.wns - now.wns)
         if not scored:
             raise Infeasible(f"no single swap improves timing (wns {now.wns:.1f} ps)")
 

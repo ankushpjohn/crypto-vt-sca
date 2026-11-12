@@ -1,8 +1,9 @@
 # Handoff for Ayush
 
-Status as of the evening of 12 November 2026. Written so you can clone the
-repository and start work without needing the earlier conversations. This
-replaces the first version, which predated the full core.
+Status as of 13 November 2026. Written so you can clone the
+repository and start work without needing the earlier conversations. The
+netlist changed on 13 November (section 4, "A bug found and fixed"); every
+number here is for the new one.
 
 ## 1. Where the project stands
 
@@ -28,7 +29,8 @@ key recovery than timing-driven assignment, under CPA and a template attack).
 |---|---|
 | ASAP7 libraries fetched, leakage parser written and checked | Done |
 | Toy S-box column: synthesis, equivalence proof, OpenSTA Vt swaps | Done |
-| Full core RTL, verified against official test vectors | Done |
+| Reference model, checked against the official test vectors | Done |
+| Full core RTL, verified against the model in every round | Done |
 | Core synthesised and the netlist verified by gate-level simulation | Done |
 | Timing constraints and timing window | Done |
 | Greedy Vt assignment with the baseline (total leakage) cost | Done |
@@ -61,8 +63,9 @@ Then check that everything works on your machine:
     sta -no_init -no_splash -exit flow/sta_window.tcl
 
 Expected: the parser reports 202 cells and Vt ratios of 0.232 / 9.6 / 97.3;
-both simulations end with "RESULT: all checks passed"; synthesis reports
-2986 cells; the window script prints 441.1 / 343.2 / 262.2 / 222.7 ps.
+both simulations end with "RESULT: all checks passed" (2000 vectors on the
+RTL, 300 on the netlist); synthesis reports 3040 cells; the window script
+prints 455.0 / 353.7 / 272.2 / 233.3 ps.
 
 **Check your netlist matches.** The netlist is generated, not stored in git
 (see section 8). After `flow/synth_core.sh`, run
@@ -71,7 +74,7 @@ both simulations end with "RESULT: all checks passed"; synthesis reports
 
 and compare with
 
-    62ff752312c04f1dc3e9ae213037369329f8e738ff9ead21723c946c68ed7b98
+    d360b4ceb029d307790f6d88d84894c7688ea27750d52bef0752c4016c099f68
 
 If it differs, your Yosys produced a different netlist and instance names
 will not match Vt assignment files. Tell Ankush before going further.
@@ -86,7 +89,9 @@ will not match Vt assignment files. Tell Ankush before going further.
 | `rtl/ascon_sbox.v` | Bitsliced Ascon S-box, `W` columns wide |
 | `rtl/ascon_round.v` | One combinational permutation round |
 | `rtl/ascon_core.v` | The core: state register, round counter, control |
-| `tb/tb_ascon_core.v`, `tb/sim_ascon_core.v` | Self-checking testbench and its simulation wrapper |
+| `model/ascon_ref.py` | Reference model: permutation, the core's state in every cycle, full encryption |
+| `model/gen_core_vectors.py` | Writes the testbench's vector file from the model |
+| `tb/tb_ascon_core.v` | Self-checking testbench, driven by that vector file |
 | `flow/sim_core.sh` | Runs the testbench on the RTL in Icarus Verilog |
 | `flow/synth_core.sh` | Synthesises the core, then runs the testbench on the netlist |
 | `flow/ascon_core.sdc` | Timing constraints, shared by every timing script |
@@ -108,7 +113,8 @@ holds a Verilog model of every library cell.
 
 and the core applies one permutation round per clock cycle. `done` is high
 for exactly one cycle, 13 cycles after `start`, when `x0..x4` hold the state
-after 12 rounds.
+after 12 rounds. A `start` during a run abandons it and begins a new one;
+the abandoned run produces no `done`.
 
 - `key0`, `key1`, `nonce0`, `nonce1` are the standard's 64-bit state words
   S1 to S4. Converting the 16-byte key and nonce into them (SP 800-232 loads
@@ -132,11 +138,26 @@ unaffected.
   nonce, the round counter is 0, and the round logic has settled on round 1.
 - Secondary: one cycle later. The state register holds the round-1 output.
 
-**Verification.** The testbench runs four key/nonce pairs and checks the
-final state and the `done` cycle. Its expected values came from a throwaway
-Python model that reproduced all 1089 official Ascon-AEAD128 known-answer
-tests. That model is not in the repository; ask Ankush if you want it as a
-starting point for the golden model.
+**Verification.** `model/ascon_ref.py` is the reference. Its `encrypt` was
+checked against an earlier version of the model that reproduced all 1089
+official Ascon-AEAD128 known-answer tests. The official file is not in the
+repository; the model's docstring says how to run the check directly. Its
+`init_states(key0, key1, nonce0, nonce1)` returns the core's state register
+in each of the 13 cycles after `start`.
+
+The testbench reads vectors generated from that function and checks, in
+every cycle, `x0..x4` after each round, `busy` and `done`. Of the 2000
+vectors, about a fifth are deliberately cut short by an early `start` or a
+reset. The first three are fixed (official key and nonce, all zeros, all
+ones); the rest are random with seed 20261112.
+
+**A bug found and fixed (13 November).** The earlier four-vector testbench
+missed a control bug: a `start` in the cycle before `done` was due reloaded
+the state while `done` still went high. The fix is one term
+(`done <= running & last & ~start`). The datapath was never wrong, but the
+fix made synthesis map the whole design differently, so the netlist, its
+hash, the cell counts and the timing numbers all changed. Any assignment
+file made before this is void.
 
 ## 5. Facts established so far
 
@@ -151,9 +172,9 @@ starting point for the golden model.
 - Median leakage relative to RVT: SRAM 0.23x, LVT 9.6x, SLVT 97x.
 - Leakage is in pW, time in ps, capacitance in fF throughout.
 
-**Core netlist.** 2986 cells of 23 types, 362.7 um^2, all mapped in RVT. The
-largest groups: 823 XNOR2x2, 391 NAND2xp33, 372 OAI21xp33, 330 INVxp33,
-326 DFFHQNx1, 266 NOR2xp33, 214 XOR2x2, 144 AOI21xp33. Synthesis caps fanout
+**Core netlist.** 3040 cells of 28 types, 363.0 um^2, all mapped in RVT. The
+largest groups: 778 XNOR2x2, 420 NAND2xp33, 394 OAI21xp33, 349 INVxp33,
+326 DFFHQNx1, 227 NOR2xp33, 203 XOR2x2, 193 AOI21xp33. Synthesis caps fanout
 at 16 with ABC's `buffer` command.
 
 **Timing constraints (`flow/ascon_core.sdc`).** Clock uncertainty 15 ps
@@ -165,13 +186,13 @@ load and the clock is ideal.
 
 | Flavour | Minimum period (ps) | Hold slack (ps) |
 |---|---|---|
-| SRAM | 441.1 | 53.6 |
-| RVT | 343.2 | 47.5 |
-| LVT | 262.2 | 38.9 |
-| SLVT | 222.7 | 24.9 |
+| SRAM | 455.0 | 55.2 |
+| RVT | 353.7 | 53.7 |
+| LVT | 272.2 | 45.5 |
+| SLVT | 233.3 | 30.2 |
 
-Clock periods for the experiments have to lie between 223 and 441 ps. Above
-441 ps every cell can be SRAM and there is nothing to decide; below 223 ps no
+Clock periods for the experiments have to lie between 233 and 455 ps. Above
+455 ps every cell can be SRAM and there is nothing to decide; below 233 ps no
 assignment meets timing. We plan to use two or three periods, for example
 260, 300 and 360 ps, because the amount of choice varies across the window.
 
@@ -179,11 +200,12 @@ assignment meets timing. We plan to use two or three periods, for example
 
 | Clock (ps) | SRAM | RVT | LVT | SLVT | Leakage (nW) | Run time |
 |---|---|---|---|---|---|---|
-| 360 | 2392 | 552 | 42 | 0 | 125.8 | 96 s |
-| 300 | 1318 | 1393 | 265 | 10 | 387.3 | 184 s |
-| 260 | 822 | 1113 | 1000 | 51 | 1445 | 226 s |
+| 360 | 2402 | 587 | 51 | 0 | 138.5 | 113 s |
+| 300 | 1436 | 1224 | 359 | 21 | 481.6 | 198 s |
+| 260 | 858 | 1113 | 1001 | 68 | 1585 | 275 s |
 
-For scale, the all-SRAM design leaks 87.6 nW and the all-LVT design 3728 nW.
+The assignment files are in `results/vt/`. For scale, the all-SRAM design
+leaks 87.1 nW and the all-LVT design 3682 nW.
 These leakage figures average each cell over its listed states, as if all
 states were equally likely; real state probabilities need your evaluator.
 
@@ -234,10 +256,10 @@ scoring; LiCSPA RTL; CPA attack.
 
 **First tasks, in order.**
 
-1. **Golden model.** Python Ascon-AEAD128 checked against the NIST
-   SP 800-232 test vectors, exposing the state after each round. Take the
-   byte order and IV from the standard, not from the older competition
-   version.
+1. **Golden model.** This now exists as `model/ascon_ref.py`. Read it and
+   check it yourself against the standard and the official test vectors,
+   since everything else is measured against it. `init_states` gives the
+   state after each round.
 2. **Check the S-box table** in `tb/ascon_sbox_ref.v` against the standard
    or your model. It was typed from memory. The full core has since matched
    official test vectors, so an error is unlikely, but it costs a minute.
@@ -247,10 +269,10 @@ scoring; LiCSPA RTL; CPA attack.
      and nonce, the round counter to 0 and `running` to 1, and compute the
      value of every net. With NumPy this is one vectorised pass over the
      cells in topological order.
-   - Cell functions for the 23 cell types can come from the liberty
+   - Cell functions for the 28 cell types can come from the liberty
      `function` attributes or from `build/asap7_RVT_TT_sim.v`.
-   - Check it: the D inputs of the state flip-flops must equal your golden
-     model's round-1 output.
+   - Check it: the D inputs of the state flip-flops must equal
+     `init_states(...)[1]`, the model's state after round 1.
    - Turn pin values into state indices (section 6).
 4. **Scoring and the security cost.** Signal per column as defined below,
    and its change for one swap.
@@ -278,7 +300,7 @@ output.
   generates it. Until we commit a frozen copy, use the hash check in
   section 2.
 - **ASAP7's small flip-flops have only an inverted output (QN).** Yosys adds
-  an inverter per flip-flop, which is where most of the 330 INVxp33 cells
+  an inverter per flip-flop, which is where most of the 349 INVxp33 cells
   come from. They sit on the state register outputs, so they leak with the
   state.
 - **Synthesis resizes gates.** ABC's `buffer` step turned most XOR and XNOR
@@ -293,6 +315,10 @@ output.
   file leaves the design unconstrained, and OpenSTA then reports a huge
   positive slack. `opt/sta.py` refuses to run in that case; a hand-written
   Tcl script will not.
+- **OpenSTA reports a total negative slack of exactly 0 for a violation
+  well under 1 ps,** while the worst slack is still negative. Judge "timing
+  met" by the worst slack. The optimiser stalled on this once and now falls
+  back to worst slack when total slack shows no gain.
 - **Slack is read through internal OpenSTA commands** (`worst_slack_cmd`,
   `Vertex_slacks`). A newer OpenSTA may need different calls; they are
   marked in `opt/sta_server.tcl`.
@@ -310,11 +336,11 @@ output.
 
 ## 10. Remaining plan
 
-About 16 days are left.
+About 15 days are left.
 
 | Dates | Ankush | Ayush | Checkpoint |
 |---|---|---|---|
-| 12-15 Nov | Done early: core, flow, baseline loop. Next: freeze netlist | Golden model; netlist evaluator | Cell states for the full core |
+| 12-15 Nov | Done: core, flow, baseline loop, reference model, wider testbench. Next: freeze netlist | Review the model; netlist evaluator | Cell states for the full core |
 | 16-19 Nov | Security cost in the loop; clock periods fixed | Scoring; trace generator | Headroom check; baseline and optimised assignments |
 | 20-23 Nov | Template attack, TVLA | LiCSPA primitive; CPA | First optimised-vs-baseline comparison |
 | 24-27 Nov | Sweeps; method sections | Sweeps; evaluation section | Report and presentation |

@@ -11,12 +11,13 @@ a conventional timing-driven assignment.
 
 New here? Read [docs/HANDOFF2AYUSH.md](docs/HANDOFF2AYUSH.md) first.
 
-## Status (12 November 2026)
+## Status (13 November 2026)
 
 | Piece | State |
 |---|---|
 | ASAP7 libraries and per-state leakage parser | Done |
-| Ascon core RTL, verified against official test vectors | Done |
+| Reference model of Ascon-AEAD128, checked against the official test vectors | Done |
+| Ascon core RTL, verified against the model in every round (2000 vectors) | Done |
 | Synthesis to a gate-level netlist, verified by gate-level simulation | Done |
 | Timing constraints and timing window | Done |
 | Greedy Vt assignment with the baseline (total leakage) cost | Done |
@@ -44,9 +45,9 @@ Run everything from the project root.
 | Command | What it does | Expected result |
 |---|---|---|
 | `python3 eval/liberty_leakage.py libs/asap7` | Self-check of the leakage parser | 202 cells; ratios 0.232 / 9.6 / 97.3 |
-| `bash flow/sim_core.sh` | RTL simulation of the core | `RESULT: all checks passed` |
-| `bash flow/synth_core.sh` | Synthesis, then gate-level simulation | 2986 cells; `RESULT: all checks passed` |
-| `sta -no_init -no_splash -exit flow/sta_window.tcl` | Minimum clock period per Vt flavour | 441.1 / 343.2 / 262.2 / 222.7 ps |
+| `bash flow/sim_core.sh` | RTL simulation of the core, 2000 vectors | `0 errors`; `RESULT: all checks passed` |
+| `bash flow/synth_core.sh` | Synthesis, then gate-level simulation, 300 vectors | 3040 cells; `RESULT: all checks passed` |
+| `sta -no_init -no_splash -exit flow/sta_window.tcl` | Minimum clock period per Vt flavour | 455.0 / 353.7 / 272.2 / 233.3 ps |
 | `python3 opt/vt_assign.py --period 300 --out results/vt/leakage_300ps.json` | Baseline Vt assignment at a 300 ps clock | `timing met`; about 3 minutes |
 
 The toy design (one S-box column) has its own two scripts,
@@ -58,7 +59,8 @@ The toy design (one S-box column) has its own two scripts,
 |---|---|
 | `docs/` | Handoff notes |
 | `rtl/` | Ascon core, round, S-box; toy S-box column |
-| `tb/` | Testbenches and the reference S-box table |
+| `tb/` | Testbench for the core and the reference S-box table |
+| `model/` | Python reference model of Ascon-AEAD128 and the test-vector generator |
 | `flow/` | Library download, synthesis, simulation, timing scripts and constraints |
 | `eval/` | Leakage parser; later scoring, trace generation and attacks |
 | `opt/` | Vt optimiser: OpenSTA driver, greedy loop, cost functions |
@@ -66,8 +68,8 @@ The toy design (one S-box column) has its own two scripts,
 | `build/` | Generated netlists, merged libraries and logs (ignored) |
 | `libs/` | ASAP7 liberty files (ignored) |
 
-Planned and not yet created: `model/` for the Python golden model,
-`configs/` for experiment settings, `report/` for the report and slides.
+Planned and not yet created: `configs/` for experiment settings and
+`report/` for the report and slides.
 
 ## Conventions
 
@@ -76,5 +78,9 @@ Planned and not yet created: `model/` for the Python golden model,
   is the highest-Vt flavour of the logic cells, not a memory cell.
 - Every experiment uses a fixed, recorded random seed.
 - A Vt assignment is only meaningful for the exact netlist it was made for.
-  Result files record the netlist's SHA-256.
+  Result files record the netlist's SHA-256; the handoff gives the current
+  netlist's value.
+- The gate-level simulation is slow (about 6 vectors per second), so it
+  runs 300 vectors by default. `VECTORS=2000 bash flow/synth_core.sh` runs
+  the full set.
 - Scripts use Unix line endings (`.gitattributes` enforces this).
