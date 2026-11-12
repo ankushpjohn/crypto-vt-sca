@@ -17,3 +17,4 @@ obj_dir/
 __pycache__/
 *.pyc
 .venv/
+docs/HANDOFF2CLAUDE.md

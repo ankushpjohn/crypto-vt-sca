@@ -23,6 +23,8 @@ TOP=ascon_core
 RTL="rtl/ascon_sbox.v rtl/ascon_round.v rtl/ascon_core.v"
 CORNER=TT
 MAX_FANOUT=${MAX_FANOUT:-16}
+VECTORS=${VECTORS:-300}      # test vectors for the gate-level simulation,
+                             # which runs at about 6 vectors per second
 
 mkdir -p "$BUILD"
 LIB="$BUILD/asap7_RVT_${CORNER}.lib"
@@ -59,7 +61,8 @@ yosys -q -l "$BUILD/$TOP.synth.log" -p "
 grep -E '_ASAP7_75t_|Number of cells|Chip area' "$BUILD/$TOP.stat.txt"
 
 # Gate-level simulation: the same testbench as flow/sim_core.sh, with the
-# netlist in place of the RTL. Cell behaviour comes from the liberty file's
+# netlist in place of the RTL and fewer vectors (the first VECTORS of the
+# same sequence). Cell behaviour comes from the liberty file's
 # function attributes, written out as Verilog by Yosys. Zero-delay: this
 # checks function only, timing is OpenSTA's job.
 echo "== gate-level simulation"
@@ -68,8 +71,9 @@ yosys -q -p "
   write_verilog -noattr $SIMLIB
 " 2>&1 | { grep -v "unsupported expression" || true; }
 
-iverilog -g2005 -s sim_ascon_core -o "$BUILD/$TOP.gatesim.vvp" \
-  "$SIMLIB" "$BUILD/$TOP.v" tb/tb_ascon_core.v tb/sim_ascon_core.v
-vvp -n "$BUILD/$TOP.gatesim.vvp" > "$BUILD/$TOP.gatesim.log"
-tail -n 1 "$BUILD/$TOP.gatesim.log"
+python3 model/gen_core_vectors.py --n "$VECTORS" --out "$BUILD/core_vectors.hex"
+iverilog -g2005 -s tb_ascon_core -o "$BUILD/$TOP.gatesim.vvp" \
+  "$SIMLIB" "$BUILD/$TOP.v" tb/tb_ascon_core.v
+vvp -n "$BUILD/$TOP.gatesim.vvp" "+vectors=$BUILD/core_vectors.hex" > "$BUILD/$TOP.gatesim.log"
+tail -n 2 "$BUILD/$TOP.gatesim.log"
 grep -q "RESULT: all checks passed" "$BUILD/$TOP.gatesim.log"

@@ -64,7 +64,7 @@ module ascon_core (
             running <= 1'b0;
             done    <= 1'b0;
         end else begin
-            done <= running & last;
+            done <= running & last & ~start;
             if (start)
                 running <= 1'b1;
             else if (last)
