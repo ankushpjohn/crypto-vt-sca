@@ -1,0 +1,30 @@
+{
+ "settings": {
+  "period": 300.0,
+  "configs": 8,
+  "bits": 24,
+  "drive": "fixed",
+  "seed": 2025,
+  "eval_seed": 7,
+  "groups": 2,
+  "nonces": 4096,
+  "tag": "licspa_300ps_24b_fixed",
+  "out_dir": "results/licspa",
+  "libdir": "libs/asap7",
+  "corner": "TT",
+  "batch_fraction": 0.05,
+  "recover_passes": 4
+ },
+ "configs_met_timing": 8,
+ "configs_tried": 8,
+ "var_mean": 11337964.105137829,
+ "var_min": 6511806.817779794,
+ "var_max": 20663838.30393315,
+ "key_mean": 4514265.202507148,
+ "key_min": 2814436.074633664,
+ "key_max": 6275582.645210725,
+ "area_mean_um2": 381.98506500001065,
+ "leak_mean_nw": 1008.8369015859003,
+ "best_config": 5,
+ "best_file": "results/licspa/licspa_300ps_24b_fixed_cfg5.json"
+}
