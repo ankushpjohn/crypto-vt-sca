@@ -1,0 +1,30 @@
+{
+ "settings": {
+  "period": 360.0,
+  "configs": 8,
+  "bits": 24,
+  "drive": "random",
+  "seed": 2026,
+  "eval_seed": 7,
+  "groups": 2,
+  "nonces": 4096,
+  "tag": "licspa_360ps_24b_random",
+  "out_dir": "results/licspa",
+  "libdir": "libs/asap7",
+  "corner": "TT",
+  "batch_fraction": 0.05,
+  "recover_passes": 4
+ },
+ "configs_met_timing": 8,
+ "configs_tried": 8,
+ "var_mean": 186501.79731149925,
+ "var_min": 103519.30363111905,
+ "var_max": 289798.6119108484,
+ "key_mean": 80251.230799299,
+ "key_min": 39802.78556814245,
+ "key_max": 122330.26168360072,
+ "area_mean_um2": 385.11065250000945,
+ "leak_mean_nw": 309.95131469801436,
+ "best_config": 2,
+ "best_file": "results/licspa/licspa_360ps_24b_random_cfg2.json"
+}
